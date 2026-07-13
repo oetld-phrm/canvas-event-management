@@ -24,7 +24,9 @@ def convert_time(utz_time_str):
 def fetch_all_paginated(url, params=None):
     items = []
     while url:
-        response = requests.get(url, headers=headers, params=params)
+        session = requests.Session()
+        session.headers.update(headers)
+        response = session.get(url, headers=headers, params=params)
         if response.status_code != 200:
             print(f"Failed request: {response.status_code} {response.text}")
             break
@@ -36,6 +38,13 @@ def fetch_all_paginated(url, params=None):
         else:
             url = None
     return items
+
+def fetch_course_name(course_id):
+    url = f"{API_BASE}/courses/{course_id}"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json().get("name")
+    return "Unknown Course"
 
 def fetch_calendar_events(course_id):
     print("Fetching calendar events...")
@@ -56,9 +65,11 @@ def fetch_assignments(course_id):
     }
     return fetch_all_paginated(url, params)
 
-def normalize_event(event, course_id):
+def normalize_event(event, course_id, course_name):
     return {
+        "item_id": event.get('id'),
         "course_id": course_id,
+        "course_name": course_name,
         'source': 'Calendar Event',
         'title': event.get('title'),
         'start_at': convert_time(event.get('start_at')),
@@ -67,17 +78,19 @@ def normalize_event(event, course_id):
         'description': event.get('description'),
         'location_name': event.get('location_name'),
         'all_day': event.get('all_day'),
-        'created_at': event.get('created_at'),
-        'updated_at': event.get('updated_at'),
+        'created_at': convert_time(event.get('created_at')),
+        'updated_at': convert_time(event.get('updated_at')),
         'workflow_state': event.get('workflow_state'),
         'assignment_type': '',  # not applicable
         'due_at': '',  # handled in assignments
         'html_url': event.get('html_url')
     }
 
-def normalize_assignment(assignment, course_id):
+def normalize_assignment(assignment, course_id, course_name):
     return {
-         "course_id": course_id,
+        "item_id": assignment.get('id'),
+        "course_id": course_id,
+        "course_name": course_name,
         'source': 'Assignment',
         'title': assignment.get('name'),
         'start_at': '',  # Not typically available
@@ -90,7 +103,7 @@ def normalize_assignment(assignment, course_id):
         'updated_at': assignment.get('updated_at'),
         'workflow_state': assignment.get('workflow_state'),
         'assignment_type': assignment.get('submission_types', []),
-        'due_at': assignment.get('due_at'),
+        'due_at': convert_time(assignment.get('due_at')),
         'html_url': assignment.get('html_url')
     }
 
@@ -100,7 +113,7 @@ def export_to_csv(items, filename):
         return
 
     fieldnames = [
-        "course_id", "source", "title", "start_at", "end_at", "due_at",
+        "item_id", "course_id", "course_name", "source", "title", "start_at", "end_at", "due_at",
         "context_code", "description", "location_name",
         "all_day", "created_at", "updated_at",
         "workflow_state", "assignment_type", "html_url",
@@ -126,8 +139,8 @@ if __name__ == "__main__":
 
             calendar_events = fetch_calendar_events(course_id)
             assignments = fetch_assignments(course_id)
-
-            all_items.extend([normalize_event(e, course_id) for e in calendar_events])
-            all_items.extend([normalize_assignment(a, course_id) for a in assignments if a.get("due_at")])
+            course_name = fetch_course_name(course_id)
+            all_items.extend([normalize_event(e, course_id, course_name) for e in calendar_events])
+            all_items.extend([normalize_assignment(a, course_id, course_name) for a in assignments if a.get("due_at")])
 
     export_to_csv(all_items, OUTPUT_CSV)
