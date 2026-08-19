@@ -36,8 +36,10 @@ def delete_event(event_id):
     """Delete a calendar event by its ID."""
     url = f"{CANVAS_API_URL}/calendar_events/{event_id}"
     response = session.delete(url)
-    if response.status_code != 200:
+    if response.status_code not in (200, 204):
         print(f"Failed to delete event {event_id}: {response.status_code} - {response.text}")
+    else:
+        print(f"Deleted event {event_id}")
     
 def main():
     with open(COURSE_IDS_CSV, newline="", encoding="utf-8") as csvfile:
