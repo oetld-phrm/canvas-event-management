@@ -6,10 +6,10 @@ CANVAS_API_URL = "https://canvas.ubc.ca/api/v1"
 CANVAS_API_KEY = input("Enter your Canvas API token: ").strip()
 COURSE_IDS_CSV = "course_ids.csv"  # CSV with a column 'course_id'
 
-# Headers for authentication
-HEADERS = {
-    "Authorization": f"Bearer {CANVAS_API_KEY}",
-}
+session = requests.Session()
+session.headers.update({
+    "Authorization": f"Bearer {CANVAS_API_KEY}"
+})
 
 def get_all_events(course_id):
     """Fetch all calendar events for a given course."""
@@ -18,10 +18,9 @@ def get_all_events(course_id):
     url = f"{CANVAS_API_URL}/calendar_events?context_codes[]={context_code}&per_page=100&all_events=true"
     
     while url:
-        response = requests.get(url, headers=HEADERS)
+        response = session.get(url)
         response.raise_for_status()
         events.extend(response.json())
-
         # Check if there is a next page
         links = response.headers.get("Link", "")
         next_url = None
@@ -36,15 +35,14 @@ def get_all_events(course_id):
 def delete_event(event_id):
     """Delete a calendar event by its ID."""
     url = f"{CANVAS_API_URL}/calendar_events/{event_id}"
-    response = requests.delete(url, headers=HEADERS)
-    if response.status_code == 200:
-        print(f"Deleted event {event_id}")
-    else:
+    response = session.delete(url)
+    if response.status_code != 200:
         print(f"Failed to delete event {event_id}: {response.status_code} - {response.text}")
-
+    
 def main():
     with open(COURSE_IDS_CSV, newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
+        counter = 0
         for row in reader:
             course_id = row["course_id"].strip()
             if not course_id:
@@ -52,7 +50,9 @@ def main():
             events = get_all_events(course_id)
             print(f"Found {len(events)} events.")
             for event in events:
+                counter = counter + 1
                 delete_event(event['id'])
+        print(f"Total events processed: {counter}")
 
 if __name__ == "__main__":
     main()
