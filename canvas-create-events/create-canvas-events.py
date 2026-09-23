@@ -5,8 +5,10 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 # Configuration
-CANVAS_API_URL = "https://canvas.ubc.ca/api/v1"
+URL = input("Enter your Canvas instance URL (e.g., https://ubccpe.instructure.com): ").strip()
+CANVAS_API_URL = f"{URL}/api/v1"
 CANVAS_API_KEY = input("Enter your Canvas API token: ").strip()
+INCLUDE_ASSIGNMENTS = input("Include assignments in events? (y/n): ").strip().lower() == "y"
 LOCAL_TIMEZONE = ZoneInfo("America/Vancouver")
 CSV_FILE_PATH = "events.csv"
 

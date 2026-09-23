@@ -2,7 +2,8 @@ import requests
 import csv
 
 # Configuration
-CANVAS_API_URL = "https://canvas.ubc.ca/api/v1"
+URL = input("Enter your Canvas instance URL (e.g., https://ubccpe.instructure.com): ").strip()
+CANVAS_API_URL = f"{URL}/api/v1"
 CANVAS_API_KEY = input("Enter your Canvas API token: ").strip()
 COURSE_IDS_CSV = "course_ids.csv"  # CSV with a column 'course_id'
 

@@ -4,7 +4,9 @@ from datetime import datetime
 import pytz
 
 # --- CONFIGURATION ---
-API_BASE = 'https://canvas.ubc.ca/api/v1'
+URL = input("Enter your Canvas instance URL (e.g., https://ubccpe.instructure.com): ").strip()
+API_BASE = f"{URL}/api/v1"
+INCLUDE_ASSIGNMENTS = input("Include assignments in events? (y/n): ").strip().lower() == "y"
 ACCESS_TOKEN = input("Enter your Canvas API token: ").strip()
 COURSE_IDS_CSV = "course_ids.csv"  # CSV with a column 'course_id'
 OUTPUT_CSV = "canvas_all_courses_events_and_assignments.csv"
@@ -138,9 +140,11 @@ if __name__ == "__main__":
                 continue
 
             calendar_events = fetch_calendar_events(course_id)
-            assignments = fetch_assignments(course_id)
+            if INCLUDE_ASSIGNMENTS:
+                assignments = fetch_assignments(course_id)
             course_name = fetch_course_name(course_id)
             all_items.extend([normalize_event(e, course_id, course_name) for e in calendar_events])
-            all_items.extend([normalize_assignment(a, course_id, course_name) for a in assignments if a.get("due_at")])
+            if assignments:
+                all_items.extend([normalize_assignment(a, course_id, course_name) for a in assignments if a.get("due_at")])
 
     export_to_csv(all_items, OUTPUT_CSV)

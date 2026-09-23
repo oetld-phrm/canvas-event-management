@@ -4,8 +4,8 @@ import requests
 # ======================
 # CONFIGURATION
 # ======================
-
-CANVAS_BASE_URL = "https://canvas.ubc.ca"
+URL = input("Enter your Canvas instance URL (e.g., https://ubccpe.instructure.com): ").strip()
+CANVAS_BASE_URL = f"{URL}/api/v1"
 CANVAS_API_KEY = input("Enter your Canvas API token: ").strip()
 CSV_FILE_PATH = "event_updates.csv"
 
