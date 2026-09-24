@@ -144,7 +144,7 @@ if __name__ == "__main__":
                 assignments = fetch_assignments(course_id)
             course_name = fetch_course_name(course_id)
             all_items.extend([normalize_event(e, course_id, course_name) for e in calendar_events])
-            if assignments:
+            if INCLUDE_ASSIGNMENTS:
                 all_items.extend([normalize_assignment(a, course_id, course_name) for a in assignments if a.get("due_at")])
 
     export_to_csv(all_items, OUTPUT_CSV)
