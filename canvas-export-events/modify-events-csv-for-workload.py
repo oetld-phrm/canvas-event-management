@@ -14,14 +14,14 @@ DESCRIPTION_COLUMN = "description"
 
 DESCRIPTION_LABELS = [
     "course_code",
-    "instructor",
+    "original_instructor",
     "event_type",
     "attendance_required",
     "duration",
     "canvas_link"
 ]
 
-INSTRUCTOR_COLUMN = "instructor"
+INSTRUCTOR_COLUMN = "original_instructor"
 
 
 # ============================================================
@@ -79,6 +79,11 @@ def split_description(df):
 # ============================================================
 
 def is_child_event(title):
+    """
+    Check if an event is a child event based on its title.
+
+    A child event is identified by the presence of a (PHRM_V...) section in the title.
+    """
     if pd.isna(title):
         return False
 
@@ -107,7 +112,7 @@ def get_parent_title(title):
 
 def normalize_instructor(value):
     """
-    Normalize instructor names for comparison.
+    Normalize instructor names for comparison, remove extra spaces etc and return a list of words separated with a single space.
     """
 
     if pd.isna(value):
@@ -124,8 +129,7 @@ def get_session_date(value):
     """
     Extract the calendar date from start_at.
 
-    This allows multiple occurrences of the same parent event
-    on different dates to be treated as separate sessions.
+    This allows multiple occurrences of the same parent event on different dates to be treated as separate sessions.
 
     Example:
 
@@ -152,10 +156,11 @@ def get_session_date(value):
 # REMOVE REDUNDANT CHILD EVENTS
 # ============================================================
 
+EXPECTED_SECTIONS = {"L01", "L02", "L03", "L04", "L05", "L06"}
+
 def remove_redundant_children(df):
     """
-    Remove child events when every child section for the same
-    course + parent title has the same instructor assignment.
+    Remove child events when every child section for the same course + parent title has the same instructor assignment, and all 6 sections exist.
 
     This function runs BEFORE instructor explosion.
 
@@ -164,6 +169,10 @@ def remove_redundant_children(df):
     print("Evaluating parent/child events...")
 
     df = df.copy()
+
+    # ----------------------------------------------------
+    # Identify parent titles and child events.
+    # ---------------------------------------------------
 
     df["_parent_title"] = (
         df[TITLE_COLUMN]
@@ -174,26 +183,32 @@ def remove_redundant_children(df):
         df[TITLE_COLUMN]
         .apply(is_child_event)
     )
-        # DEBUG
-    debug_rows = df[
-        df[TITLE_COLUMN].astype(str).str.contains(
-            "IA 12: Tutorial #9",
-            case=False,
-            na=False
-        )
-    ]
 
-    print("\nDEBUG IA 12:")
-    for idx, row in debug_rows.iterrows():
-        print(
-            f"  {idx}: "
-            f"is_child={row['_is_child']} | "
-            f"parent_title={repr(row['_parent_title'])} | "
-            f"title={repr(row[TITLE_COLUMN])}"
+    # ----------------------------------------------------
+    # Extract section code from child event title.
+    #
+    # Example:
+    # IA 01: Lab (PHRM_V 100 L03 2026W1)
+    # -> L03
+    # ----------------------------------------------------
+
+    def extract_section(title):
+        match = re.search(
+            r"\b(L0[1-6])\b",
+            str(title)
         )
 
-    # Normalize the comma-separated instructor string,
-    # but DO NOT explode it yet.
+        return match.group(1) if match else None
+
+    df["_section"] = (
+        df[TITLE_COLUMN]
+        .apply(extract_section)
+    )
+
+    # ----------------------------------------------------
+    # Normalize instructor assignments.
+    # Do not explode instructors yet.
+    # -------------------
     df["_instructor_assignment"] = (
         df[INSTRUCTOR_COLUMN]
         .fillna("")
@@ -211,10 +226,11 @@ def remove_redundant_children(df):
         )
     )
 
-    # Group by course + parent title.
-    #
-    # Do NOT include date/time because L01-L06 may occur
-    # on different dates.
+    # ----------------------------------------------------
+    # Group by course and parent title.
+    # Do not group by date/time.
+    # ----------------------------------------------------
+
     grouped = df.groupby(
         [
             "course_id",
@@ -236,10 +252,48 @@ def remove_redundant_children(df):
             ~group["_is_child"]
         ]
 
-        if children.empty:
+        if children.empty or parents.empty:
             continue
 
-        if parents.empty:
+        # ------------------------------------------------
+        # Check that all expected sections exist.
+        # ------------------------------------------------
+
+        found_sections = set(
+            children["_section"].dropna()
+        )
+
+        missing_sections = (
+            EXPECTED_SECTIONS - found_sections
+        )
+
+        if missing_sections:
+
+            print(
+                f"  Keeping children: {parent_title}"
+            )
+
+            print(
+                "    Missing sections: "
+                + ", ".join(sorted(missing_sections))
+            )
+
+            continue
+        # ------------------------------------------------
+        # Verify every child has a recognized section.
+        # ------------------------------------------------
+
+        if children["_section"].isna().any():
+
+            print(
+                f"  Keeping children: {parent_title}"
+            )
+
+            print(
+                "    One or more child sections "
+                "could not be identified."
+            )
+
             continue
 
         # ----------------------------------------------------
@@ -294,6 +348,11 @@ def remove_redundant_children(df):
             )
 
             print(
+                "    Sections present: "
+                + ", ".join(sorted(found_sections))
+            )
+
+            print(
                 f"    Instructor assignment: {assignment}"
             )
 
@@ -307,6 +366,9 @@ def remove_redundant_children(df):
                 f"    {len(unique_assignments)} "
                 f"different instructor assignments"
             )
+    # ----------------------------------------------------
+    # Remove redundant child events.
+    # ----------------------------------------------------
 
     if rows_to_remove:
         df = df.drop(index=rows_to_remove)
@@ -315,7 +377,9 @@ def remove_redundant_children(df):
         f"Removed {len(rows_to_remove):,} "
         f"redundant child events."
     )
-
+    # ----------------------------------------------------
+    # Remove temporary columns.
+    # ----------------------------------------------------
     df = df.drop(
         columns=[
             "_parent_title",
@@ -328,12 +392,11 @@ def remove_redundant_children(df):
 
 # ============================================================
 # EXPLODE INSTRUCTORS
+# duplicate rows for comma-separated instructor list
+# preserve orginal instructor column & column for original instructor count and create a new column for exploded instructor
 # ============================================================
 
 def explode_instructors(df):
-    """
-   duplicate rows for comma separated instructor list
-    """
 
     print("Exploding instructor on commas...")
 
@@ -343,24 +406,36 @@ def explode_instructors(df):
 
     df = df.copy()
 
-    df[INSTRUCTOR_COLUMN] = (
+    # Split instructors into a list, removing empty values
+    # and normalizing whitespace.
+    instructor_lists = (
         df[INSTRUCTOR_COLUMN]
         .fillna("")
         .astype(str)
-        .str.split(",")
+        .apply(
+            lambda value: [
+                normalize_instructor(name)
+                for name in value.split(",")
+                if normalize_instructor(name)
+            ]
+        )
     )
 
+    # Count instructors before explosion.
+    df["instructor_count"] = instructor_lists.apply(len)
+
+    # Create new column for individual instructors.
+    df["instructor"] = instructor_lists
+    
+    # Create one row per instructor.
     df = df.explode(
-        INSTRUCTOR_COLUMN,
+        "instructor",
         ignore_index=True
     )
 
-    df[INSTRUCTOR_COLUMN] = (
-        df[INSTRUCTOR_COLUMN]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-    )
+
+  # Replace missing exploded values with empty strings.
+    df["instructor"] = df["instructor"].fillna("")
 
     print(
         f"Rows after instructor explosion: {len(df):,}"
