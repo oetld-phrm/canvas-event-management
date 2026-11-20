@@ -30,7 +30,7 @@ INSTRUCTOR_COLUMN = "original_instructor"
 
 def split_description(df):
     """
-    Split the pipe-delimited description field into named columns.
+    Split descriptions into labeled columns, ignoring any unlabeled fields.
     """
 
     print("Splitting description on | ...")
@@ -46,17 +46,10 @@ def split_description(df):
         .fillna("")
         .astype(str)
         .str.split("|", regex=False)
+        .str[:len(DESCRIPTION_LABELS)]
     )
 
     max_parts = parts.map(len).max()
-
-    if max_parts > len(DESCRIPTION_LABELS):
-        raise ValueError(
-            f"The description contains {max_parts} pipe-delimited "
-            f"fields, but only {len(DESCRIPTION_LABELS)} labels "
-            f"were supplied.\n\n"
-            f"Labels supplied:\n{DESCRIPTION_LABELS}"
-        )
 
     for i, label in enumerate(DESCRIPTION_LABELS):
         df[label] = (
