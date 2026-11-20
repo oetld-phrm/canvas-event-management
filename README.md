@@ -7,7 +7,7 @@ Use these tools to export Canvas calendar events, create new events from a CSV, 
 | Task | Command | File you provide | Required data |
 | --- | --- | --- | --- |
 | Export events from Canvas | `export` | `course_ids.csv` | A `course_id` column with one Canvas course ID per row. |
-| Import **new** events | `import` | `import-events.csv` | `Course ID`, `Title`, `Start Date`; optional details and section schedules. |
+| Import **new** events | `import` | `import-events.csv` | `Course ID`, `Title`, plus a course start or section schedules; optional details. |
 | Modify existing events | `update` | `update-events.csv` or `.xlsx` | `item_id` (or `event_id`) plus the columns you want to change. |
 | Delete course events | `delete` | `course_ids.csv` | A `course_id` column. Deletes all calendar events returned for those courses. |
 
@@ -98,7 +98,7 @@ Use **CSV only**, with these exact column names:
 | --- | --- | --- |
 | `Course ID` | Yes | Canvas course ID, e.g. `12345`. |
 | `Title` | Yes | Event title. |
-| `Start Date` | Yes | `MM/DD/YYYY HH:MM`, e.g. `11/02/2026 09:00`. |
+| `Start Date` | Course-wide events only | `MM/DD/YYYY HH:MM`, e.g. `11/02/2026 09:00`. |
 | `End Date` | No | Same format. Blank uses the start time. Must not precede the start. |
 | `Description` | No | Plain text or HTML. |
 | `All Day` | No | `true`, `1`, `yes`, or `y` means true, ignoring case. Blank and other values mean false. |
@@ -125,18 +125,18 @@ With no file argument, import first checks `import-events.csv` in the terminal's
 
 ### Creating section schedules
 
-Keep the required course-level columns above. Add these three columns for each section schedule you need:
+Keep `Course ID` and `Title`. For section-specific rows, course-level `Start Date` and `End Date` can be blank or omitted entirely; the section dates supply the schedule. Add these columns for each section schedule you need:
 
 | Section slot | Columns |
 | --- | --- |
 | L01 | `L01 Start Date`, `L01 End Date`, `L01 Section ID` |
 | L02 through L06 | The same three names with `L02`, `L03`, `L04`, `L05`, or `L06` as the prefix. |
 
-A section schedule is included only when both its start and section ID are filled in. Blank section end uses that section's start. Dates use the same Vancouver local format. The ID is the numeric **Canvas section ID**; the prefix labels the CSV slot.
+Each populated section needs both its start and section ID. Incomplete sections are rejected; fully blank sections are skipped. Blank section end uses that section's start. Dates use the same Vancouver local format. The ID is the numeric **Canvas section ID**; the prefix labels the CSV slot.
 
 ```csv
-Course ID,Title,Start Date,End Date,L01 Start Date,L01 End Date,L01 Section ID,L02 Start Date,L02 End Date,L02 Section ID
-12345,Lab,11/02/2026 09:00,11/02/2026 12:00,11/02/2026 09:00,11/02/2026 10:00,55501,11/02/2026 11:00,11/02/2026 12:00,55502
+Course ID,Title,L01 Start Date,L01 End Date,L01 Section ID,L02 Start Date,L02 End Date,L02 Section ID
+12345,Lab,11/02/2026 09:00,11/02/2026 10:00,55501,11/02/2026 11:00,11/02/2026 12:00,55502
 ```
 
 ## 4. Modify existing events: use `update-events.csv`

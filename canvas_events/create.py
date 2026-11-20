@@ -56,13 +56,19 @@ def get_section_events(row):
         end_value = row.get(f"{prefix} End Date", "").strip()
         section_id = row.get(f"{prefix} Section ID", "").strip()
 
-        # Only create a child event if both required values exist.
-        if not start_value or not section_id:
+        if not any((start_value, end_value, section_id)):
             continue
+        if not start_value or not section_id:
+            raise ValueError(f'{prefix}: require Start Date and Section ID')
+
+        start_at = convert_time(start_value)
+        end_at = convert_time(end_value) if end_value else start_at
+        if datetime.fromisoformat(end_at) < datetime.fromisoformat(start_at):
+            raise ValueError(f'{prefix}: End Date precedes Start Date')
 
         child_events[i] = {
-            "start_at": convert_time(start_value),
-            "end_at": convert_time(end_value) if end_value else convert_time(start_value),
+            "start_at": start_at,
+            "end_at": end_at,
             "context_code": f"course_section_{section_id}",
         }
 
@@ -87,19 +93,24 @@ def build_calendar_event(row):
     if not title:
         raise ValueError("Missing Title")
 
+    child_events = get_section_events(row)
+    if not start_date and not child_events:
+        raise ValueError('Missing Start Date: provide a course start or a complete section schedule')
     start_at = convert_time(start_date)
 
     end_at = convert_time(
         row.get("End Date", "")
     )
+    if end_at and not start_at:
+        raise ValueError('End Date requires a course Start Date')
+    if start_at and end_at and datetime.fromisoformat(end_at) < datetime.fromisoformat(start_at):
+        raise ValueError('End Date precedes Start Date')
 
     data = {
         "calendar_event": {
             "context_code": f"course_{course_id}",
             "title": title,
             "description": row.get("Description", ""),
-            "start_at": start_at,
-            "end_at": end_at or start_at,
             "all_day": convert_bool(
                 row.get("All Day", "")
             ),
@@ -107,7 +118,8 @@ def build_calendar_event(row):
         }
     }
 
-    child_events = get_section_events(row)
+    if start_at:
+        data['calendar_event'].update(start_at=start_at, end_at=end_at or start_at)
 
     if child_events:
         data["calendar_event"]["child_event_data"] = child_events
@@ -131,18 +143,13 @@ def main(args=None):
     plan = []
     with args.spreadsheet.open(newline='', encoding='utf-8-sig') as source:
         reader = csv.DictReader(source)
-        if not {'Course ID', 'Title', 'Start Date'} <= set(reader.fieldnames or []):
-            raise ValueError('Require Course ID, Title, and Start Date headers')
+        if not {'Course ID', 'Title'} <= set(reader.fieldnames or []):
+            raise ValueError('Require Course ID and Title headers')
         for number, row in enumerate(reader, 2):
             if not any(row.values()):
                 continue
             try:
-                if not row.get('Start Date', '').strip():
-                    raise ValueError('Missing Start Date')
                 data = build_calendar_event(row)
-                event = data['calendar_event']
-                if datetime.fromisoformat(event['end_at']) < datetime.fromisoformat(event['start_at']):
-                    raise ValueError('End Date precedes Start Date')
                 plan.append((number, data))
             except ValueError as exc:
                 raise ValueError(f'Row {number}: {exc}') from exc
